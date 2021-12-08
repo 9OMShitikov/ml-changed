@@ -4,7 +4,7 @@ import numpy as np
 import random
 
 
-class ReplayBuffer(object):
+class PriorityReplayBuffer(object):
     def __init__(self, size, alpha, eps):
         """Create Replay buffer.
         Parameters
