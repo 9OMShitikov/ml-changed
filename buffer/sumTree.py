@@ -59,4 +59,4 @@ class SumTree:
         data_idx = idx - self._maxsize + 1
 
         # returns tuple: (tree_idx, data)
-        return idx, self._data[data_idx]
+        return idx, self.tree[idx], self._data[data_idx]

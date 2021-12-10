@@ -5,7 +5,7 @@ import random
 
 
 class PriorityReplayBuffer(object):
-    def __init__(self, size, alpha, eps):
+    def __init__(self, size, alpha=0.3, eps=1e-5):
         """Create Replay buffer.
         Parameters
         ----------
@@ -15,30 +15,44 @@ class PriorityReplayBuffer(object):
         alpha: float
             Determines how much prioritization is used. alpha==0 - uniform randomized buffer
         """
-        self._storage = SumTree(size)
+        self._tree = SumTree(size)
+        self._storage = self._tree._data[:]
         self._alpha = alpha  # alpha determines how much prioritization is used
+        self._beta = 0.4 # beta, set up during training
         self._eps = eps  # epsilon smooths priority, priority = (TD_error + eps) ** alpha
 
     def __len__(self):
-        return len(self._storage)
+        return len(self._tree)
 
-    def add(self, obs_t, action, reward, obs_tp1, done, priority):
+    def add(self, obs_t, action, reward, obs_tp1, done, td_error):
+        priority = (td_error + self._eps) ** self._alpha
+        self._storage = self._tree._data[: len(self._tree)]
         data = (obs_t, action, reward, obs_tp1, done)
-        self._storage.insert(data, priority)
+        self._tree.insert(data, priority)
+
+    def update(self, idxs, td_error):
+        priorities = (td_error + self._eps) ** self._alpha
+        for idx, priority in zip(idxs, priorities):
+          self._tree.update(idx, priority)
 
     def _encode_sample(self, records):
         ids, obses_t, actions, rewards, obses_tp1, dones = [], [], [], [], [], []
+        probas = []
         for data in records:
-            idx, (obs_t, action, reward, obs_tp1, done) = data
+            idx, proba, (obs_t, action, reward, obs_tp1, done) = data
             obses_t.append(np.array(obs_t, copy=False))
             actions.append(np.array(action, copy=False))
             rewards.append(reward)
             obses_tp1.append(np.array(obs_tp1, copy=False))
             dones.append(done)
             ids.append(idx)
+            probas.append(proba)
+        
+        w = np.array(len(records) * probas) ** -self._beta
+        w /= np.max(w)
         return np.array(obses_t), np.array(actions),\
                np.array(rewards), np.array(obses_tp1),\
-               np.array(dones), np.array(ids)
+               np.array(dones), np.array(ids), w
 
     def sample(self, batch_size):
         """Sample a batch of experiences.
@@ -62,6 +76,6 @@ class PriorityReplayBuffer(object):
         idx: np.array
             indexes of observations
         """
-        segment = self._storage.total_sum() / batch_size
-        records = [self._storage.get(np.random.uniform(i * segment, (i+1) * segment)) for i in range(batch_size)]
+        segment = self._tree.total_sum() / batch_size
+        records = [self._tree.get(np.random.uniform(i * segment, (i+1) * segment)) for i in range(batch_size)]
         return self._encode_sample(records)
