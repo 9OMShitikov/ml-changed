@@ -5,7 +5,7 @@ import random
 
 
 class PriorityReplayBuffer(object):
-    def __init__(self, size, alpha=0.3, eps=1e-5):
+    def __init__(self, size, alpha=0.6, eps=1e-5):
         """Create Replay buffer.
         Parameters
         ----------
@@ -18,7 +18,7 @@ class PriorityReplayBuffer(object):
         self._tree = SumTree(size)
         self._storage = self._tree._data[:]
         self._alpha = alpha  # alpha determines how much prioritization is used
-        self._beta = 0.4 # beta, set up during training
+        self.beta = 0.4 # beta, set up during training
         self._eps = eps  # epsilon smooths priority, priority = (TD_error + eps) ** alpha
 
     def __len__(self):
@@ -48,8 +48,10 @@ class PriorityReplayBuffer(object):
             ids.append(idx)
             probas.append(proba)
         
-        w = np.array(len(records) * probas) ** -self._beta
+        w = (len(records) * np.array(probas) /\
+                            self._tree.total_sum()) ** -self.beta
         w /= np.max(w)
+
         return np.array(obses_t), np.array(actions),\
                np.array(rewards), np.array(obses_tp1),\
                np.array(dones), np.array(ids), w
